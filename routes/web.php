@@ -24,4 +24,32 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
+
+
+use App\Http\Controllers\CricketController;
+
+Route::get('/cricket/live', [CricketController::class, 'fetchLiveMatches']);
+Route::get('/cricket/matches', [CricketController::class, 'index']);
+
+
+
+
+use App\Jobs\FetchCricketMatchesJob;
+
+Route::get('/test-cricket-api', function () {
+    FetchCricketMatchesJob::dispatch();
+
+    return response()->json(['message' => 'FetchCricketMatchesJob dispatched']);
+});
+
+
+Route::get('/live-matches', function () {
+    return view('live-matches');
+});
+
+// routes/api.php
+use App\Http\Controllers\CricketMatchesController;
+
+Route::get('/cricket-matches', [CricketMatchesController::class, 'index']);
+
 require __DIR__.'/auth.php';

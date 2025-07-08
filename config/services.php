@@ -34,5 +34,11 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    'cricket' => [
+        'key' => env('CRICKET_API_KEY'),
+        'base_url' => 'https://api.cricapi.com/v1',
+        ],
+
+
 
 ];
