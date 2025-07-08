@@ -8,8 +8,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Fixture extends Model
 {
-    protected $table = 'fixtures';
-
     protected $fillable = [
         'sport_id',
         'external_id',
@@ -17,14 +15,11 @@ class Fixture extends Model
         'country',
         'season',
         'league_external_id',
-        'date_start',
-        'date_end',
-        'is_cup',
-        'is_women',
-        'live_lineups',
-        'live_stats',
-        'live_pbp',
-        'path',
+        'metadata',
+    ];
+
+    protected $casts = [
+        'metadata' => 'array', // Cast JSON metadata to array
     ];
 
     /**
@@ -36,10 +31,10 @@ class Fixture extends Model
     }
 
     /**
-     * Get the matches that belong to this fixture.
+     * Get all matches for this fixture.
      */
     public function matches(): HasMany
     {
-        return $this->hasMany(Matches::class, 'fixture_id');
+        return $this->hasMany(Matches::class);
     }
 }

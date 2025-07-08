@@ -7,7 +7,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Sport extends Model
 {
-    protected $fillable = ['name'];
+    protected $fillable = ['name', 'slug', 'metadata'];
+
+    protected $casts = [
+        'metadata' => 'array', // Cast JSON metadata to array for easy access
+    ];
 
     /**
      * Get all fixtures for this sport.

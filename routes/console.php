@@ -1,35 +1,30 @@
 <?php
-// routes/console.php
 
-use App\Jobs\FetchCricketMatchesJob;
 use App\Jobs\StoreLiveScoreJob;
+use App\Models\Sport;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schedule;
-use Illuminate\Support\Facades\Http;
 
-// Existing inspire command
+// Show an inspiring quote
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Log message task
+// Basic log
 Schedule::call(function () {
-    Log::info('This is a scheduled task running at ' . now()->toDateTimeString());
+    Log::info('Scheduled task running at ' . now()->toDateTimeString());
 })->everyFiveMinutes()->name('log-message');
 
-// Schedule FetchCricketMatchesJob
-//Schedule::job(new FetchCricketMatchesJob)->everyMinute()->name('fetch-cricket-matches')->timezone('Asia/Kathmandu');
-// Schedule::call(function () {
-//     $yourApiUrl = 'https://api.cricapi.com/v1/currentMatches?apikey=5b5c582d-bb03-4243-a539-028aa954ecf7';
-//     $data = Http::get($yourApiUrl)->json();
-//     dispatch(new StoreLiveScoreJob($data));
-// })->everyMinute()->name('store-live-score')->timezone('Asia/Kathmandu');
+// Correct way to schedule StoreLiveScoreJob dynamically
+Schedule::call(function () {
+    if (Sport::count() === 0) {
+        Log::warning('No sports found in the database. Please seed the sports table.');
+        return;
+    }
 
-// Schedule the self-contained job
-Schedule::job(new StoreLiveScoreJob)
-    ->everyMinute()
-    ->name('process-live-scores')
-    ->timezone('Asia/Kathmandu')
-    ->withoutOverlapping();
+    Sport::all()->each(function (Sport $sport) {
+        dispatch(new StoreLiveScoreJob($sport));
+    });
+})->everyMinute()->name('schedule-live-scores')->timezone('Asia/Kathmandu');

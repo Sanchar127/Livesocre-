@@ -8,8 +8,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Matches extends Model
 {
-    protected $table = 'matches';
-
     protected $fillable = [
         'sport_id',
         'fixture_id',
@@ -19,10 +17,12 @@ class Matches extends Model
         'status',
         'start_time',
         'league',
+        'metadata',
     ];
 
     protected $casts = [
         'start_time' => 'datetime',
+        'metadata' => 'array', // Cast JSON metadata to array
     ];
 
     /**
@@ -46,6 +46,6 @@ class Matches extends Model
      */
     public function score(): HasOne
     {
-        return $this->hasOne(Score::class, 'match_id');
+        return $this->hasOne(Score::class);
     }
 }
