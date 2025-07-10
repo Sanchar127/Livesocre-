@@ -324,6 +324,15 @@ protected function processCricketScheduleMatches(array $matches): void
                 Log::debug('Skipping cricket match with empty ID', ['match_data' => $matchData]);
                 continue;
             }
+            // Get raw status from API data if exists
+        $rawStatus = $matchAttrs->status ?? null;
+
+
+        if (empty($rawStatus)) {
+            $status = $this->normalizeCricketStatus('scheduled');
+        } else {
+            $status = $this->normalizeCricketStatus((string)$rawStatus);
+        }
 
             $tournamentId = $matchData['tournament_id'];
             $tournamentName = $matchData['tournament_name'];
@@ -350,7 +359,7 @@ protected function processCricketScheduleMatches(array $matches): void
             // Extract teams
             $homeTeam = (string)($match->localteam['name'] ?? 'Unknown');
             $awayTeam = (string)($match->visitorteam['name'] ?? 'Unknown');
-            $status = $this->normalizeCricketStatus('scheduled');
+            
 
             $dateTime = $this->parseCricketMatchTime(
                 (string)($matchAttrs->date ?? null),
@@ -400,7 +409,7 @@ protected function normalizeCricketStatus(string $status): string
     $status = strtolower(trim($status));
     
     return match ($status) {
-        'notstarted', 'ns' => 'scheduled',
+        'scheduled', 'notstarted', 'ns' => 'scheduled',
         'inprogress', 'live', 'started' => 'live',
         'completed', 'finished', 'result' => 'finished',
         'abandoned', 'cancelled' => 'cancelled',
@@ -781,6 +790,9 @@ protected function processCricketLiveScores(array $liveMatches): void
     foreach ($liveMatches as $matchData) {
         // Log full match data
         Log::debug('Raw match data', ['match_data' => json_encode($matchData, JSON_PRETTY_PRINT | JSON_PARTIAL_OUTPUT_ON_ERROR)]);
+
+
+        
 
         // Log specific fields for score construction
         Log::debug('Raw match data for score construction', [
