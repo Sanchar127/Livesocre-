@@ -18,13 +18,13 @@ Schedule::call(function () {
 })->everyFiveMinutes()->name('log-message');
 
 // Correct way to schedule StoreLiveScoreJob dynamically
-Schedule::call(function () {
-    if (Sport::count() === 0) {
-        Log::warning('No sports found in the database. Please seed the sports table.');
-        return;
-    }
+// Schedule::call(function () {
+//     if (Sport::count() === 0) {
+//         Log::warning('No sports found in the database. Please seed the sports table.');
+//         return;
+//     }
 
-    Sport::all()->each(function (Sport $sport) {
-        dispatch(new StoreLiveScoreJob($sport));
-    });
-})->everyMinute()->name('schedule-live-scores')->timezone('Asia/Kathmandu');
+//     Sport::all()->each(function (Sport $sport) {
+//         dispatch(new StoreLiveScoreJob($sport));
+//     });
+// })->everyMinute()->name('schedule-live-scores')->timezone('Asia/Kathmandu');
