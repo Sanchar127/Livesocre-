@@ -61,16 +61,16 @@ class StoreLiveScoreJob implements ShouldQueue
         } else {
             // Original football processing
             // Step 1: Fetch league mappings
-            $leagueData = $this->fetchLeagueMappings();
+            $leagueData = $this->fetchFootballLeagueMappings();
             $leagues = $leagueData['leagues'];
 
             // Step 2: Process upcoming matches from d7 API
-            $matchData = $this->fetchMatchData();
-            $this->processD7Matches($matchData['matches'], $leagues);
+            $matchData = $this->fetchFootballMatchData();
+            $this->ProcessFootballMatchSchedule($matchData['matches'], $leagues);
 
             // Step 3: Process LIVE scores from live API
             $liveScoresData = $this->fetchLiveScores();
-            $this->processLiveScores($liveScoresData['matches']);
+            $this->ProcessFootballLiveScore($liveScoresData['matches']);
 
             Log::info('Live scores processing completed', [
                 'sport' => $this->sport->name,
@@ -92,8 +92,8 @@ class StoreLiveScoreJob implements ShouldQueue
         }
     }
 }
-
-    protected function fetchLeagueMappings(): array
+    //league fetching 
+    protected function fetchFootballLeagueMappings(): array
 {
    
 
@@ -179,7 +179,9 @@ protected function fetchCricketLeagueMappings(): array
     });
 }
 
-protected function fetchMatchData(): array
+//fetching football match schedule and cricket match schedule
+
+protected function fetchFootballMatchData(): array
 {
     if ($this->sport->slug === 'cricket') {
         return $this->fetchCricketSchedule();
@@ -187,7 +189,7 @@ protected function fetchMatchData(): array
 
     // Original football implementation
     try {
-        $url = "{$this->baseUrl}/{$this->apiKey}/{$this->sport->slug}/d7";
+        $url = "https://www.goalserve.com/getfeed/0ddaa180b8bc4de749a508ddbacda0d5/soccernew/d7";
         Log::debug('Fetching match data', ['url' => $url]);
 
         $response = Http::timeout(30)->retry(3, 1000)->get($url);
@@ -266,6 +268,11 @@ protected function fetchCricketScheduleMatches(): array
     return ['matches' => $matches];
 }
 
+
+//ending of football match and cricket match fetching 
+
+//parse cricket match
+
 protected function parseCricketScheduleMatch(SimpleXMLElement $match): array
 {
     $data = [
@@ -312,6 +319,105 @@ protected function parseCricketScheduleMatch(SimpleXMLElement $match): array
     return $data;
 }
 
+protected function ProcessFootballMatchSchedule(array $matches, array $leagues): void
+{
+    foreach ($matches as $matchData) {
+        try {
+            $matchId = (string)($matchData['@attributes']['id'] ?? null);
+            if (!$matchId) {
+                Log::debug('Skipping match with empty ID', ['match_data' => $matchData]);
+                continue;
+            }
+
+            $attributes = $matchData['@attributes'] ?? [];
+            $homeTeam = $matchData['localteam']['@attributes'] ?? [];
+            $awayTeam = $matchData['visitorteam']['@attributes'] ?? [];
+            $leagueId = $matchData['league_id'] ?? null;
+            $fixId = $attributes['fix_id'] ?? $leagueId;
+
+            if (!$leagueId) {
+                Log::warning('Skipping match with missing league_id', ['match_id' => $matchId]);
+                continue;
+            }
+
+            // For cricket, use tournament name as league name
+            $leagueName = $this->sport->slug === 'cricket'
+                ? ($matchData['category'] ?? 'Unknown Tournament')
+                : ($leagues[$leagueId] ?? $matchData['category'] ?? 'Unknown League');
+
+            // Create/update fixture
+            $fixture = Fixture::firstOrCreate(
+                ['external_id' => $fixId ?: $leagueId],
+                [
+                    'sport_id' => $this->sport->id,
+                    'league_external_id' => $leagueId,
+                    'name' => $leagueName,
+                    'country' => $this->extractCountryFromCategory($matchData['category'] ?? ''),
+                    'season' => $this->extractSeasonFromDate($attributes['date'] ?? null),
+                ]
+            );
+
+            // Cricket-specific data preparation
+            $metadata = [
+                'venue' => $attributes['venue'] ?? null,
+                'commentary_available' => $attributes['commentary_available'] ?? null,
+                'static_id' => $attributes['static_id'] ?? null,
+            ];
+
+            if ($this->sport->slug === 'cricket') {
+                $metadata['match_type'] = $attributes['matchtype'] ?? null;
+                $metadata['format'] = $attributes['format'] ?? null;
+            }
+
+            // Normalize status
+            $status = $this->normalizeStatus($attributes['status'] ?? 'unknown');
+
+            $finishedStatuses = ['ft', 'game finished', 'finished', 'full time'];
+            $result = null;
+
+            if (in_array(strtolower($status), $finishedStatuses, true)) {
+                $rawScore = $matchData['ft']['@score'] ?? null;
+                $result = $this->sanitizeScore($rawScore);
+            }
+
+            // Create/update match
+            $match = MatchModel::updateOrCreate(
+                [
+                    'external_match_id' => $matchId,
+                    'sport_id' => $this->sport->id,
+                ],
+                [
+                    'fixture_id' => $fixture->id,
+                    'home_team' => $homeTeam['name'] ?? 'Unknown',
+                    'away_team' => $awayTeam['name'] ?? 'Unknown',
+                    'status' => $status,
+                    'start_time' => $this->parseMatchTime(
+                        $attributes['date'] ?? null,
+                        $attributes['formatted_date'] ?? null,
+                        $attributes['time'] ?? null
+                    ) ?? now(),
+                    'league' => $leagueName,
+                    'metadata' => $metadata,
+                    'result' => $result,
+                ]
+            );
+
+            Log::debug('Match metadata processed', [
+                'match_id' => $matchId,
+                'match_id_db' => $match->id,
+                'status' => $status,
+                'result' => $result,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to process match', [
+                'match_id' => $matchId ?? 'unknown',
+                'match_data' => $matchData,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+    }
+}
 protected function processCricketScheduleMatches(array $matches): void
 {
     foreach ($matches as $matchData) {
@@ -407,16 +513,18 @@ protected function processCricketScheduleMatches(array $matches): void
 protected function normalizeCricketStatus(string $status): string
 {
     $status = strtolower(trim($status));
-    
+
     return match ($status) {
         'scheduled', 'notstarted', 'ns' => 'scheduled',
         'inprogress', 'live', 'started' => 'live',
+        'stumps', 'lunch', 'tea', 'innings break' => 'paused_live',  // << Added paused live statuses
         'completed', 'finished', 'result' => 'finished',
         'abandoned', 'cancelled' => 'cancelled',
         'delayed' => 'delayed',
         default => 'unknown',
     };
 }
+
 
 protected function extractCountryFromTournament(string $tournamentName): string
 {
@@ -449,83 +557,6 @@ protected function extractSeasonFromTournament(string $tournamentName): string
     return date('Y') . '/' . (date('Y') + 1);
 }
 
-protected function processD7Matches(array $matches, array $leagues): void
-{
-    foreach ($matches as $matchData) {
-        try {
-            $matchId = (string)($matchData['@attributes']['id'] ?? null);
-            if (!$matchId) continue;
-
-            $attributes = $matchData['@attributes'];
-            $homeTeam = $matchData['localteam']['@attributes'] ?? [];
-            $awayTeam = $matchData['visitorteam']['@attributes'] ?? [];
-            $leagueId = $matchData['league_id'] ?? null;
-            $fixId = $attributes['fix_id'] ?? $leagueId;
-
-            if (!$leagueId) {
-                Log::warning('Skipping match with missing league_id', ['match_id' => $matchId]);
-                continue;
-            }
-
-            // For cricket, use tournament name as league name
-            $leagueName = $this->sport->slug === 'cricket' 
-                ? ($matchData['category'] ?? 'Unknown Tournament')
-                : ($leagues[$leagueId] ?? $matchData['category'] ?? 'Unknown League');
-
-            // Create/update fixture
-            $fixture = Fixture::firstOrCreate(
-                ['external_id' => $fixId ?: $leagueId],
-                [
-                    'sport_id' => $this->sport->id,
-                    'league_external_id' => $leagueId,
-                    'name' => $leagueName,
-                    'country' => $this->extractCountryFromCategory($matchData['category'] ?? ''),
-                    'season' => $this->extractSeasonFromDate($attributes['date'] ?? null),
-                ]
-            );
-
-            // Cricket-specific data preparation
-            $metadata = [
-                'venue' => $attributes['venue'] ?? null,
-                'commentary_available' => $attributes['commentary_available'] ?? null,
-                'static_id' => $attributes['static_id'] ?? null,
-            ];
-
-            if ($this->sport->slug === 'cricket') {
-                $metadata['match_type'] = $attributes['matchtype'] ?? null;
-                $metadata['format'] = $attributes['format'] ?? null;
-            }
-
-            // Create/update match (metadata only)
-            MatchModel::updateOrCreate(
-                ['external_match_id' => $matchId],
-                [
-                    'sport_id' => $this->sport->id,
-                    'fixture_id' => $fixture->id,
-                    'home_team' => $homeTeam['name'] ?? 'Unknown',
-                    'away_team' => $awayTeam['name'] ?? 'Unknown',
-                    'status' => $this->normalizeStatus($attributes['status'] ?? 'unknown'),
-                    'start_time' => $this->parseMatchTime(
-                        $attributes['date'] ?? null,
-                        $attributes['formatted_date'] ?? null,
-                        $attributes['time'] ?? null
-                    ),
-                    'league' => $leagueName,
-                    'metadata' => $metadata,
-                ]
-            );
-
-            Log::debug('Match metadata processed', ['match_id' => $matchId]);
-
-        } catch (\Exception $e) {
-            Log::error('Failed to process match', [
-                'match_data' => $matchData,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-}
-   
 
 protected function fetchCricketLiveScores(): array
 {
@@ -568,7 +599,7 @@ protected function fetchCricketLiveScores(): array
 }
 
 
-    protected function processLiveScores(array $liveMatches): void
+    protected function ProcessFootballLiveScore(array $liveMatches): void
 {
     foreach ($liveMatches as $matchData) {
         try {
@@ -654,6 +685,7 @@ protected function fetchCricketLiveScores(): array
                 'full_time_score' => $this->sanitizeScore($matchData['ft']['score'] ?? null),
                 'extra_time_score' => $this->sanitizeScore($matchData['et']['score'] ?? null),
                 'match_status' => $this->normalizeStatus($matchData['@attributes']['status'] ?? 'unknown'),
+               'match_time' => $matchData['@attributes']['status'] ?? 'unknown',
                 'goal_events' => $this->extractEventsByType($matchData['events'] ?? [], 'goal'),
                 'red_card_events' => $this->extractEventsByType($matchData['events'] ?? [], 'redcard'),
                 'yellow_card_events' => $this->extractEventsByType($matchData['events'] ?? [], 'yellowcard'),
@@ -668,10 +700,25 @@ protected function fetchCricketLiveScores(): array
                 ]
             );
 
-            // Update match status from live data
-            $match->update([
-                'status' => $this->normalizeStatus($matchData['@attributes']['status'] ?? 'unknown')
-            ]);
+
+
+$status = $this->normalizeStatus($matchData['@attributes']['status'] ?? 'unknown');
+
+$finishedStatuses = ['ft', 'game finished', 'finished', 'full time'];
+$result = null;
+
+if (in_array(strtolower($status), $finishedStatuses, true)) {
+    // Extract raw score string from ft->@score
+    $rawScore = $matchData['ft']['@score'] ?? null;
+    $result = $this->sanitizeScore($rawScore);
+}
+
+$match->update([
+    'status' => $status,
+    'result' => $result,
+]);
+
+    
 
             Log::info('Live score processed', [
                 'match_id' => $matchId,
@@ -781,7 +828,6 @@ protected function fetchLiveScores(): array
             return ['sport' => $this->sport->name, 'matches' => []];
         }
     }
-
 
 protected function processCricketLiveScores(array $liveMatches): void
 {

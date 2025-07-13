@@ -17,6 +17,7 @@ class Matches extends Model
         'status',
         'start_time',
         'league',
+        'result',
         'metadata',
     ];
 
@@ -44,8 +45,9 @@ class Matches extends Model
     /**
      * Get the score for this match.
      */
-    public function score(): HasOne
-    {
-        return $this->hasOne(Score::class);
-    }
+  public function score(): HasOne
+{
+    return $this->hasOne(Score::class, 'match_id');
+}
+
 }

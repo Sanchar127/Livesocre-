@@ -26,10 +26,10 @@ Route::middleware('auth')->group(function () {
 
 
 
-use App\Http\Controllers\CricketController;
+// use App\Http\Controllers\CricketController;
 
-Route::get('/cricket/live', [CricketController::class, 'fetchLiveMatches']);
-Route::get('/cricket/matches', [CricketController::class, 'index']);
+// Route::get('/cricket/live', [CricketController::class, 'fetchLiveMatches']);
+// Route::get('/cricket/matches', [CricketController::class, 'index']);
 
 
 
@@ -48,8 +48,34 @@ Route::get('/live-matches', function () {
 });
 
 // routes/api.php
-use App\Http\Controllers\CricketMatchesController;
+// use App\Http\Controllers\CricketMatchesController;
 
-Route::get('/cricket-matches', [CricketMatchesController::class, 'index']);
+// Route::get('/cricket-matches', [CricketMatchesController::class, 'index']);
+
+
+/////
+
+// use App\Http\Controllers\MatchController;
+
+// Route::get('/matches', [MatchController::class, 'index']);
+
+
+use App\Http\Controllers\MatchController;
+
+Route::get('/matches', [MatchController::class, 'index'])->name('matches.index');
+
+
+Route::get('/{sport}/live', [MatchController::class, 'live'])
+    ->where('sport', 'soccer|cricket|tennis') // whitelist
+    ->name('matches.live');
+
+
+
+Route::get('/matches/{country}', [MatchController::class, 'getMatchesByCountry'])->name('matches.by_country');
+
+
 
 require __DIR__.'/auth.php';
+
+
+
