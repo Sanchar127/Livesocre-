@@ -24,6 +24,7 @@
     },
     "dependencies": {
         "laravel-echo": "^2.1.6",
+        "puppeteer": "^24.13.0",
         "pusher-js": "^8.4.0"
     }
 }

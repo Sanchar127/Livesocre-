@@ -6,6 +6,11 @@ use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
 class Kernel extends ConsoleKernel
 {
+    protected $commands = [
+    \App\Console\Commands\SyncGoalServeMatches::class,
+    \App\Console\Commands\ScrapeCricbuzzMatches::class,
+];
+
     protected function schedule(Schedule $schedule)
 {
     $schedule->call(function () {
