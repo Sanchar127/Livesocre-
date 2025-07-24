@@ -13,6 +13,7 @@ class CricketDataProcessor
     public function processFixtures(array $seriesData, int $sportId = 1): void
     {
         $fixtures = [];
+        Log::info("Processing " . count($seriesData) . " fixtures for sport ID: {$sportId}");
 
         foreach ($seriesData as $series) {
             try {

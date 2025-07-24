@@ -6,6 +6,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schedule;
+use App\Jobs\ProcessCricbuzzScrape;
 
 // Show an inspiring quote
 Artisan::command('inspire', function () {
@@ -39,7 +40,7 @@ Schedule::call(function () {
 
     dispatch(new ProcessCricbuzzScrape());
 
-})->everyFifteenMinutes()
+})->everyFiveMinutes()
   ->name('scrape-cricbuzz-job')
   ->withoutOverlapping()
   ->timezone('Asia/Kathmandu');
